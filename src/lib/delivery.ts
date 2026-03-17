@@ -21,6 +21,10 @@ export type StorePackage = {
   store: StoreWithDistance;
   items: PackageItem[];
   deliveryModes: {
+    retirada: {
+      estimatedMinutes: number;
+      shippingCost: number;
+    };
     rapida: {
       estimatedMinutes: number;
       shippingCost: number;
@@ -36,6 +40,10 @@ export type OtherStorePackage = {
   store: StoreWithDistance;
   items: PackageItem[];
   deliveryModes: {
+    rapida: {
+      estimatedMinutes: number;
+      shippingCost: number;
+    };
     programada: {
       availableDates: ScheduleDate[];
       shippingCost: number;
@@ -52,6 +60,15 @@ export type CDPackage = {
   shippingCost: number;
 };
 
+export type FullOrderPackage = {
+  items: PackageItem[];
+  transitDaysToStore: number;
+  lastMileMinutes: number;
+  lastMileStore: StoreWithDistance;
+  availableDates: ScheduleDate[];
+  shippingCost: number;
+};
+
 export type ScheduleDate = {
   date: string;
   label: string;
@@ -59,17 +76,10 @@ export type ScheduleDate = {
   slots: string[];
 };
 
-export type FullOrderPackage = {
-  items: PackageItem[];
-  availableDates: ScheduleDate[];
-  shippingCost: number;
-  lastMileStore: StoreWithDistance;
-};
-
 export type DeliveryPlan = {
   nearestStore: StoreWithDistance;
   storePackage: StorePackage | null;
-  otherStorePackages: OtherStorePackage[];
+  otherStorePackage: OtherStorePackage | null;
   cdPackage: CDPackage | null;
   fullOrderPackage: FullOrderPackage;
   allAvailableAtStore: boolean;
@@ -143,7 +153,7 @@ function findItemsAtOtherStores(
   pendingItems: PendingItem[],
   ranked: StoreWithDistance[],
   nearestCode: string
-): { fulfilled: Map<string, { store: StoreWithDistance; items: PackageItem[] }>; unfulfilled: PackageItem[] } {
+): { fulfilled: Map<string, { store: StoreWithDistance; items: PackageItem[] }>; allFulfilled: boolean } {
   const fulfilled = new Map<string, { store: StoreWithDistance; items: PackageItem[] }>();
   const remaining = pendingItems.map((p) => ({ ...p }));
 
@@ -152,8 +162,7 @@ function findItemsAtOtherStores(
     .slice(0, MAX_OTHER_STORES_TO_CHECK);
 
   for (const store of candidates) {
-    const allFulfilled = remaining.every((r) => r.remainingQty <= 0);
-    if (allFulfilled) break;
+    if (remaining.every((r) => r.remainingQty <= 0)) break;
 
     const itemsFromThisStore: PackageItem[] = [];
 
@@ -178,28 +187,23 @@ function findItemsAtOtherStores(
     }
   }
 
-  const unfulfilled: PackageItem[] = remaining
-    .filter((r) => r.remainingQty > 0)
-    .map((r) => ({
-      product: r.product,
-      quantity: r.remainingQty,
-      availableQty: 0,
-      fulfilledQty: r.remainingQty,
-    }));
-
-  return { fulfilled, unfulfilled };
+  const allFulfilled = remaining.every((r) => r.remainingQty <= 0);
+  return { fulfilled, allFulfilled };
 }
 
 /**
- * Motor de entrega v3.
+ * Motor de entrega v5.
  *
- * Fluxo:
- * 1. Encontra filial mais próxima e verifica estoque
- * 2. Itens disponíveis -> Pacote Filial (Rápida ou Programada)
- * 3. Itens indisponíveis -> busca em outras filiais próximas (até 50km)
- *    - Se outra filial tem -> Pacote Outra Filial (só Programada, com frete da distância)
- * 4. Itens que nenhuma filial tem -> Pacote CD (Programada, 3 dias)
- * 5. Opção de pedido completo sempre disponível
+ * 4 pacotes possíveis:
+ * - Pacote 1: Filial mais próxima envia o que tem em estoque (Retirada, Rápida ou Programada)
+ * - Pacote 2: Outra filial envia os itens restantes (Programada)
+ *             → Só existe se outra(s) filial(is) conseguem cobrir TODOS os itens faltantes
+ * - Pacote 3: CD envia itens restantes para a filial, que entrega ao cliente (Programada, +3 dias)
+ *             → Só existe quando há itens faltantes (alternativa ao Pacote 2 — exclusivo no UI)
+ * - Pacote 4: Pedido INTEIRO via CD → filial → cliente (Programada, +3 dias)
+ *             → SEMPRE disponível
+ *
+ * Pacote 2 e 3 são alternativas no UI (usuário escolhe um).
  */
 export function calculateDeliveryPlan(
   customer: CustomerLocation,
@@ -241,18 +245,6 @@ export function calculateDeliveryPlan(
     }
   }
 
-  const allMissingItems: PackageItem[] = pendingItems.map((p) => ({
-    product: p.product,
-    quantity: p.remainingQty,
-    availableQty: 0,
-    fulfilledQty: p.remainingQty,
-  }));
-
-  const { fulfilled: otherStoresMap } =
-    pendingItems.length > 0
-      ? findItemsAtOtherStores(pendingItems, ranked, nearest.code)
-      : { fulfilled: new Map() };
-
   const deliveryMinutes = calcDeliveryMinutes(nearest.distanceKm);
   const motoboyShipping = calcShippingCost(nearest.distanceKm);
 
@@ -262,6 +254,10 @@ export function calculateDeliveryPlan(
           store: nearest,
           items: storeItems,
           deliveryModes: {
+            retirada: {
+              estimatedMinutes: 30,
+              shippingCost: 0,
+            },
             rapida: {
               estimatedMinutes: Math.min(deliveryMinutes, 120),
               shippingCost: motoboyShipping,
@@ -274,67 +270,80 @@ export function calculateDeliveryPlan(
         }
       : null;
 
-  const otherStorePackages: OtherStorePackage[] = [];
-  const otherStoreFulfillsAll = otherStoresMap.size > 0;
+  const allMissingItems: PackageItem[] = pendingItems.map((p) => ({
+    product: p.product,
+    quantity: p.remainingQty,
+    availableQty: 0,
+    fulfilledQty: p.remainingQty,
+  }));
 
-  if (otherStoreFulfillsAll) {
-    const allOtherItems: PackageItem[] = [];
-    let bestStore: StoreWithDistance | null = null;
+  let otherStorePackage: OtherStorePackage | null = null;
+  let cdPackage: CDPackage | null = null;
 
-    for (const [, { store, items }] of otherStoresMap) {
-      if (!bestStore) bestStore = store;
-      allOtherItems.push(...items);
-    }
+  if (allMissingItems.length > 0) {
+    const { fulfilled: otherStoresMap, allFulfilled } =
+      findItemsAtOtherStores(pendingItems, ranked, nearest.code);
 
-    if (bestStore && allOtherItems.length > 0) {
-      const storeShipping = calcShippingCost(bestStore.distanceKm);
-      const transitDays = bestStore.distanceKm > 15 ? 2 : 1;
-      otherStorePackages.push({
-        store: bestStore,
-        items: allMissingItems,
-        deliveryModes: {
-          programada: {
-            availableDates: generateScheduleDates(transitDays, 5),
-            shippingCost: storeShipping,
+    if (allFulfilled && otherStoresMap.size > 0) {
+      let bestStore: StoreWithDistance | null = null;
+      for (const [, { store }] of otherStoresMap) {
+        if (!bestStore) bestStore = store;
+        break;
+      }
+
+      if (bestStore) {
+        const otherShipping = calcShippingCost(bestStore.distanceKm);
+        const otherDeliveryMin = calcDeliveryMinutes(bestStore.distanceKm);
+        const transitDays = bestStore.distanceKm > 15 ? 2 : 1;
+        otherStorePackage = {
+          store: bestStore,
+          items: allMissingItems,
+          deliveryModes: {
+            rapida: {
+              estimatedMinutes: Math.min(otherDeliveryMin, 120),
+              shippingCost: otherShipping,
+            },
+            programada: {
+              availableDates: generateScheduleDates(transitDays, 5),
+              shippingCost: otherShipping,
+            },
           },
-        },
-      });
+        };
+      }
     }
+
+    cdPackage = {
+      items: allMissingItems,
+      transitDaysToStore: 3,
+      lastMileMinutes: deliveryMinutes,
+      lastMileStore: nearest,
+      availableDates: generateScheduleDates(3, 5),
+      shippingCost: motoboyShipping,
+    };
   }
 
-  const cdPackage: CDPackage | null =
-    allMissingItems.length > 0
-      ? {
-          items: allMissingItems,
-          transitDaysToStore: 3,
-          lastMileMinutes: deliveryMinutes,
-          lastMileStore: nearest,
-          availableDates: generateScheduleDates(3, 5),
-          shippingCost: motoboyShipping,
-        }
-      : null;
-
-  const allItems: PackageItem[] = cart.map((item) => ({
-    ...item,
-    availableQty: getStoreStock(nearest.code, item.product.id),
+  const allItemsAsPackage: PackageItem[] = cart.map((item) => ({
+    product: item.product,
+    quantity: item.quantity,
+    availableQty: 0,
     fulfilledQty: item.quantity,
   }));
 
   const fullOrderPackage: FullOrderPackage = {
-    items: allItems,
+    items: allItemsAsPackage,
+    transitDaysToStore: 3,
+    lastMileMinutes: deliveryMinutes,
+    lastMileStore: nearest,
     availableDates: generateScheduleDates(3, 5),
     shippingCost: motoboyShipping,
-    lastMileStore: nearest,
   };
-
-  const hasExternalItems = allMissingItems.length > 0;
 
   return {
     nearestStore: nearest,
     storePackage,
-    otherStorePackages,
+    otherStorePackage,
     cdPackage,
     fullOrderPackage,
-    allAvailableAtStore: !hasExternalItems,
+    allAvailableAtStore: allMissingItems.length === 0,
   };
 }

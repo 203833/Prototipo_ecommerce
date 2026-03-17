@@ -1,10 +1,10 @@
 import { AppProvider, useApp } from "./context/AppContext";
 import HomeScreen from "./components/HomeScreen";
 import CartScreen from "./components/CartScreen";
-import CheckoutScreen from "./components/CheckoutScreen";
 import OrderConfirmationScreen from "./components/OrderConfirmationScreen";
 import CategoriesScreen from "./components/CategoriesScreen";
 import PlaceholderScreen from "./components/PlaceholderScreen";
+import CartDrawer from "./components/CartDrawer";
 
 function AppContent() {
   const { screen } = useApp();
@@ -15,11 +15,12 @@ function AppContent() {
         {screen === "home" && <HomeScreen />}
         {screen === "categories" && <CategoriesScreen />}
         {screen === "cart" && <CartScreen />}
-        {screen === "checkout" && <CheckoutScreen />}
+        {screen === "checkout" && <CartScreen />}
         {screen === "confirmed" && <OrderConfirmationScreen />}
         {screen === "cupons" && <PlaceholderScreen title="Cupons" icon="🏷️" desc="Seus cupons de desconto aparecerão aqui" />}
         {screen === "conta" && <PlaceholderScreen title="Minha Conta" icon="👤" desc="Gerencie seu perfil e pedidos" />}
       </main>
+      <CartDrawer />
     </div>
   );
 }

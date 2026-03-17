@@ -2,7 +2,7 @@ import { Search, User, ShoppingCart, MapPin, Menu } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 export default function SJHeader({ showSearch = true }: { showSearch?: boolean }) {
-  const { searchQuery, setSearchQuery, setScreen, cartCount, cartTotal, customer } = useApp();
+  const { searchQuery, setSearchQuery, setScreen, cartCount, cartTotal, customer, setCartDrawerOpen } = useApp();
 
   function money(v: number) {
     return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -55,7 +55,7 @@ export default function SJHeader({ showSearch = true }: { showSearch?: boolean }
             </button>
 
             <button
-              onClick={() => setScreen("cart")}
+              onClick={() => setCartDrawerOpen(true)}
               className="flex items-center gap-2 text-sj-gray-600 hover:text-sj-navy transition relative"
             >
               <div className="relative">

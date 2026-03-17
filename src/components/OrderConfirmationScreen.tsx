@@ -55,13 +55,19 @@ function TrackingTimeline({ order }: { order: ConfirmedOrder }) {
       },
       {
         icon: Bike,
-        label: order.storeMode === "rapida" ? "Motoboy a caminho" : "Agendado para entrega",
+        label: order.storeMode === "retirada"
+          ? "Pronto para retirada"
+          : order.storeMode === "rapida"
+            ? "Motoboy a caminho"
+            : "Agendado para entrega",
         detail:
-          order.storeMode === "rapida"
-            ? `~${order.plan.storePackage?.deliveryModes.rapida.estimatedMinutes ?? 45} min`
-            : order.storeSchedule
-              ? `${order.storeSchedule.date.split("-").reverse().slice(0, 2).join("/")} às ${order.storeSchedule.slot}`
-              : "",
+          order.storeMode === "retirada"
+            ? "Retire em até 30 minutos"
+            : order.storeMode === "rapida"
+              ? `~${order.plan.storePackage?.deliveryModes.rapida.estimatedMinutes ?? 45} min`
+              : order.storeSchedule
+                ? `${order.storeSchedule.date.split("-").reverse().slice(0, 2).join("/")} às ${order.storeSchedule.slot}`
+                : "",
         color: "text-sj-orange",
         bgColor: "bg-sj-orange",
       },
@@ -124,10 +130,10 @@ function CDTrackingTimeline({ order }: { order: ConfirmedOrder }) {
     : "";
 
   const steps = [
-    { icon: Building2, label: "Separação no CD", detail: "Centro de Distribuição", color: "bg-sj-gray-500" },
-    { icon: Package, label: `Trânsito até filial`, detail: `${pkg.transitDaysToStore} dia(s) úteis`, color: "bg-sj-blue" },
-    { icon: Store, label: "Recebimento na filial", detail: pkg.lastMileStore.name, color: "bg-sj-navy" },
-    { icon: Bike, label: "Entrega por motoboy", detail: schedLabel, color: "bg-sj-orange" },
+    { icon: Package, label: "Pedido em separação", detail: "Preparando seus produtos", color: "bg-sj-gray-500" },
+    { icon: Store, label: "Em trânsito para filial", detail: `Previsão: ${pkg.transitDaysToStore} dia(s)`, color: "bg-sj-blue" },
+    { icon: Store, label: "Pronto na filial", detail: pkg.lastMileStore.name, color: "bg-sj-navy" },
+    { icon: Bike, label: "Saiu para entrega", detail: schedLabel, color: "bg-sj-orange" },
   ];
 
   return (
@@ -193,9 +199,9 @@ function BusinessDashboard({ order }: { order: ConfirmedOrder }) {
 
   const totalItems = order.items.reduce((s, i) => s + i.quantity, 0);
   const storeItems = order.plan.storePackage?.items.reduce((s, i) => s + i.fulfilledQty, 0) ?? 0;
-  const otherStoreItems = order.plan.otherStorePackages.reduce(
-    (sum, pkg) => sum + pkg.items.reduce((s, i) => s + i.fulfilledQty, 0), 0
-  );
+  const otherStoreItems = (order.remainingSource === "otherStore" && order.plan.otherStorePackage)
+    ? order.plan.otherStorePackage.items.reduce((s, i) => s + i.fulfilledQty, 0)
+    : 0;
   const allStoreItems = storeItems + otherStoreItems;
   const fulfillmentRate = totalItems > 0 ? Math.round((allStoreItems / totalItems) * 100) : 0;
 
@@ -278,12 +284,12 @@ function BusinessDashboard({ order }: { order: ConfirmedOrder }) {
                   <span>Pacote Filial: <strong className="text-white">{order.plan.storePackage.items.length} itens</strong> disponíveis</span>
                 </div>
               )}
-              {order.plan.otherStorePackages.map((osPkg) => (
-                <div key={osPkg.store.code} className="flex items-center gap-2">
+              {order.plan.otherStorePackage && (
+                <div className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-sj-blue" />
-                  <span>Outra filial ({osPkg.store.name}): <strong className="text-white">{osPkg.items.length} itens</strong> — {osPkg.store.distanceKm.toFixed(1)} km</span>
+                  <span>Outra filial ({order.plan.otherStorePackage.store.name}): <strong className="text-white">{order.plan.otherStorePackage.items.length} itens</strong> — {order.plan.otherStorePackage.store.distanceKm.toFixed(1)} km</span>
                 </div>
-              ))}
+              )}
               {order.plan.cdPackage && (
                 <div className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />
@@ -310,10 +316,10 @@ function BusinessDashboard({ order }: { order: ConfirmedOrder }) {
                 <Star className="h-3 w-3 text-amber-400 inline mr-1" />
                 O split delivery garante que <strong className="text-white">{fulfillmentRate}%</strong> do pedido é atendido por filiais, aumentando satisfação e reduzindo cancelamentos.
               </p>
-              {order.plan.otherStorePackages.length > 0 && (
+              {order.plan.otherStorePackage && (
                 <p>
                   <Star className="h-3 w-3 text-amber-400 inline mr-1" />
-                  <strong className="text-white">{order.plan.otherStorePackages.length} filial(is)</strong> auxiliar(es) foram acionadas para cobrir itens indisponíveis na loja mais próxima, evitando depender do CD.
+                  A filial <strong className="text-white">{order.plan.otherStorePackage.store.name}</strong> foi acionada para cobrir itens indisponíveis na loja mais próxima, evitando depender do CD.
                 </p>
               )}
               <p>
@@ -463,7 +469,9 @@ export default function OrderConfirmationScreen() {
           <div className="bg-white rounded-xl border border-sj-gray-200 overflow-hidden shadow-sm">
             <div className="bg-sj-green-light px-4 py-3 flex items-center gap-2.5 border-b border-sj-green/10">
               <div className="h-8 w-8 rounded-lg bg-sj-green/10 flex items-center justify-center">
-                {order.storeMode === "rapida" ? (
+                {order.storeMode === "retirada" ? (
+                  <Store className="h-4 w-4 text-sj-green" />
+                ) : order.storeMode === "rapida" ? (
                   <Zap className="h-4 w-4 text-sj-orange" />
                 ) : (
                   <CalendarDays className="h-4 w-4 text-sj-blue" />
@@ -471,12 +479,17 @@ export default function OrderConfirmationScreen() {
               </div>
               <div className="flex-1">
                 <h3 className="text-xs font-bold text-sj-navy">
-                  Pacote 1 — {order.storeMode === "rapida" ? "Entrega Rápida" : "Programada"}
+                  Pacote 1 — {order.storeMode === "retirada" ? "Retirada em Loja" : order.storeMode === "rapida" ? "Entrega Rápida" : "Programada"}
                 </h3>
                 <p className="text-[10px] text-sj-gray-500 mt-0.5">
                   {order.plan.storePackage.items.length} {order.plan.storePackage.items.length === 1 ? "item" : "itens"} da {order.plan.nearestStore.name}
                 </p>
               </div>
+              {order.storeMode === "retirada" && (
+                <span className="bg-sj-green/10 text-sj-green text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1">
+                  <Store className="h-3 w-3" />Grátis
+                </span>
+              )}
               {order.storeMode === "rapida" && (
                 <span className="bg-sj-orange/10 text-sj-orange text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1">
                   <Clock className="h-3 w-3" />
@@ -505,36 +518,40 @@ export default function OrderConfirmationScreen() {
         )}
 
         {/* Pacote 2 — Outra filial envia o que a mais próxima não tem */}
-        {order.deliveryOption === "split" && order.plan.otherStorePackages.map((osPkg, idx) => {
-          const pkgNum = (order.plan.storePackage ? 1 : 0) + idx + 1;
+        {order.deliveryOption === "split" && order.remainingSource === "otherStore" && order.plan.otherStorePackage && (() => {
+          const osPkg = order.plan.otherStorePackage!;
           const sched = order.otherStoreSchedules[osPkg.store.code];
+          const isRapida = order.pkg2Mode === "rapida";
           return (
-            <div key={osPkg.store.code} className="bg-white rounded-xl border border-sj-gray-200 overflow-hidden shadow-sm">
+            <div className="bg-white rounded-xl border border-sj-gray-200 overflow-hidden shadow-sm">
               <div className="bg-blue-50 px-4 py-3 flex items-center gap-2.5 border-b border-blue-200/50">
                 <div className="h-8 w-8 rounded-lg bg-sj-blue/10 flex items-center justify-center">
-                  <Store className="h-4 w-4 text-sj-blue" />
+                  {isRapida ? <Zap className="h-4 w-4 text-sj-orange" /> : <Store className="h-4 w-4 text-sj-blue" />}
                 </div>
                 <div className="flex-1">
                   <h3 className="text-xs font-bold text-sj-navy">
-                    Pacote {pkgNum} — Filial {osPkg.store.name}
+                    Pacote 2 — {isRapida ? "Entrega Rápida" : "Programada"} — Filial {osPkg.store.name}
                   </h3>
                   <p className="text-[10px] text-sj-gray-500 mt-0.5">
-                    {osPkg.items.length} {osPkg.items.length === 1 ? "item" : "itens"} &middot; {osPkg.store.distanceKm.toFixed(1)} km &middot; Previsão{" "}
-                    {sched ? sched.date.split("-").reverse().slice(0, 2).join("/") : "Agendado"}
+                    {osPkg.items.length} {osPkg.items.length === 1 ? "item" : "itens"} &middot; {osPkg.store.distanceKm.toFixed(1)} km
+                    {isRapida
+                      ? ` · ~${osPkg.deliveryModes.rapida.estimatedMinutes}min`
+                      : sched ? ` · Previsão ${sched.date.split("-").reverse().slice(0, 2).join("/")}` : " · Agendado"}
                   </p>
                 </div>
-                <span className="bg-sj-blue/10 text-sj-blue text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1">
-                  <CalendarDays className="h-3 w-3" />
-                  Programada
-                </span>
+                {isRapida ? (
+                  <span className="bg-sj-orange/10 text-sj-orange text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1">
+                    <Clock className="h-3 w-3" />~{osPkg.deliveryModes.rapida.estimatedMinutes}min
+                  </span>
+                ) : (
+                  <span className="bg-sj-blue/10 text-sj-blue text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />Programada
+                  </span>
+                )}
               </div>
-
               <div className="p-4 flex flex-col gap-1">
                 {osPkg.items.map((item) => (
-                  <div
-                    key={item.product.id}
-                    className="flex items-center gap-2 text-[11px] bg-sj-gray-50 rounded-lg px-2.5 py-2"
-                  >
+                  <div key={item.product.id} className="flex items-center gap-2 text-[11px] bg-sj-gray-50 rounded-lg px-2.5 py-2">
                     <span className="text-sm">{item.product.imageEmoji}</span>
                     <span className="flex-1 truncate font-medium text-sj-navy">{item.product.name}</span>
                     <span className="text-sj-gray-400">x{item.fulfilledQty}</span>
@@ -543,10 +560,10 @@ export default function OrderConfirmationScreen() {
               </div>
             </div>
           );
-        })}
+        })()}
 
         {/* Pacote 3 — CD envia para a filial mais próxima, ela entrega */}
-        {order.deliveryOption === "split" && order.plan.cdPackage && (
+        {order.deliveryOption === "split" && order.remainingSource === "cd" && order.plan.cdPackage && (
           <div className="bg-white rounded-xl border border-sj-gray-200 overflow-hidden shadow-sm">
             <div className="bg-sj-gray-50 px-4 py-3 flex items-center gap-2.5 border-b border-sj-gray-200">
               <div className="h-8 w-8 rounded-lg bg-sj-gray-200 flex items-center justify-center">
@@ -554,7 +571,7 @@ export default function OrderConfirmationScreen() {
               </div>
               <div className="flex-1">
                 <h3 className="text-xs font-bold text-sj-navy">
-                  Pacote {(order.plan.storePackage ? 1 : 0) + order.plan.otherStorePackages.length + 1} — Encomenda (CD)
+                  Pacote {(order.plan.storePackage ? 1 : 0) + 1} — Entrega Programada
                 </h3>
                 <p className="text-[10px] text-sj-gray-500 mt-0.5">
                   {order.plan.cdPackage.items.length} {order.plan.cdPackage.items.length === 1 ? "item" : "itens"} &middot; Previsão{" "}
@@ -588,43 +605,35 @@ export default function OrderConfirmationScreen() {
           </div>
         )}
 
-        {/* FULL delivery */}
+        {/* Pacote 4 — Pedido completo via CD */}
         {order.deliveryOption === "full" && (
           <div className="bg-white rounded-xl border border-sj-gray-200 overflow-hidden shadow-sm">
-            <div className="bg-sj-blue-light px-4 py-3 flex items-center gap-2.5 border-b border-sj-blue/10">
-              <div className="h-8 w-8 rounded-lg bg-sj-blue/10 flex items-center justify-center">
-                <Package className="h-4 w-4 text-sj-blue" />
+            <div className="bg-amber-50 px-4 py-3 flex items-center gap-2.5 border-b border-amber-200/50">
+              <div className="h-8 w-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                <Package className="h-4 w-4 text-amber-600" />
               </div>
               <div className="flex-1">
-                <h3 className="text-xs font-bold text-sj-navy">Pedido Completo — Entrega Única</h3>
+                <h3 className="text-xs font-bold text-sj-navy">Pedido Completo — Entrega Programada</h3>
                 <p className="text-[10px] text-sj-gray-500 mt-0.5">
-                  {order.items.length} {order.items.length === 1 ? "item" : "itens"} &middot; Previsão{" "}
+                  {order.plan.fullOrderPackage.items.length} {order.plan.fullOrderPackage.items.length === 1 ? "item" : "itens"} &middot; Previsão{" "}
                   {order.fullSchedule
                     ? order.fullSchedule.date.split("-").reverse().slice(0, 2).join("/")
-                    : "3+ dias"}
+                    : `${order.plan.fullOrderPackage.transitDaysToStore}+ dias`}
                 </p>
               </div>
               <span className="bg-sj-blue/10 text-sj-blue text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1">
-                <CalendarDays className="h-3 w-3" />
-                Agendado
+                <CalendarDays className="h-3 w-3" />Programada
               </span>
             </div>
 
-            <div className="p-4 flex flex-col gap-4">
-              <CDTrackingTimeline order={order} />
-
-              <div className="flex flex-col gap-1">
-                {order.items.map((item) => (
-                  <div
-                    key={item.product.id}
-                    className="flex items-center gap-2 text-[11px] bg-sj-gray-50 rounded-lg px-2.5 py-2"
-                  >
-                    <span className="text-sm">{item.product.imageEmoji}</span>
-                    <span className="flex-1 truncate font-medium text-sj-navy">{item.product.name}</span>
-                    <span className="text-sj-gray-400">x{item.quantity}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="p-4 flex flex-col gap-1">
+              {order.plan.fullOrderPackage.items.map((item) => (
+                <div key={item.product.id} className="flex items-center gap-2 text-[11px] bg-sj-gray-50 rounded-lg px-2.5 py-2">
+                  <span className="text-sm">{item.product.imageEmoji}</span>
+                  <span className="flex-1 truncate font-medium text-sj-navy">{item.product.name}</span>
+                  <span className="text-sj-gray-400">x{item.fulfilledQty}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}

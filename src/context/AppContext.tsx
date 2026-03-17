@@ -10,7 +10,9 @@ export type ConfirmedOrder = {
   plan: DeliveryPlan;
   customer: CustomerLocation;
   deliveryOption: "split" | "full";
-  storeMode: "rapida" | "programada";
+  remainingSource: "otherStore" | "cd";
+  storeMode: "retirada" | "rapida" | "programada";
+  pkg2Mode: "rapida" | "programada";
   storeSchedule: { date: string; slot: string } | null;
   otherStoreSchedules: Record<string, { date: string; slot: string }>;
   cdSchedule: { date: string; slot: string } | null;
@@ -40,6 +42,8 @@ type AppState = {
   setSearchQuery: (q: string) => void;
   confirmedOrder: ConfirmedOrder | null;
   setConfirmedOrder: (o: ConfirmedOrder | null) => void;
+  cartDrawerOpen: boolean;
+  setCartDrawerOpen: (open: boolean) => void;
 };
 
 const AppContext = createContext<AppState | null>(null);
@@ -57,6 +61,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrder | null>(null);
+  const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
 
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
@@ -109,6 +114,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSearchQuery,
         confirmedOrder,
         setConfirmedOrder,
+        cartDrawerOpen,
+        setCartDrawerOpen,
       }}
     >
       {children}
