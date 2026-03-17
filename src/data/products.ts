@@ -82,10 +82,10 @@ export function getStoreStock(storeCode: string, productId: string): number {
   const hash = Array.from(storeCode + productId).reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const rand = seedRandom(hash);
 
-  if (rand < 0.40) return 0;
-  if (rand < 0.65) return Math.floor(rand * 3) + 1;
-  if (rand < 0.85) return Math.floor(rand * 6) + 2;
-  return Math.floor(rand * 10) + 3;
+  if (rand < 0.08) return 0;
+  if (rand < 0.25) return Math.floor(rand * 4) + 1;
+  if (rand < 0.55) return Math.floor(rand * 10) + 3;
+  return Math.floor(rand * 20) + 5;
 }
 
 export function hasStock(storeCode: string, productId: string): boolean {

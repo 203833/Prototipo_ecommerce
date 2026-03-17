@@ -440,34 +440,36 @@ export default function CartScreen() {
               {/* Packages */}
               {plan && (
                 <div className="flex flex-col gap-4">
-                  {/* ── Delivery option toggle: Split vs Full ── */}
-                  <div className="bg-white rounded-lg border border-sj-gray-200 p-4 shadow-sm">
-                    <h4 className="text-xs font-bold text-sj-navy mb-3">Como deseja receber?</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => setDeliveryOption("split")}
-                        className={`rounded-lg border-2 px-4 py-3 text-left transition ${deliveryOption === "split" ? "border-sj-blue bg-sj-blue-50/30" : "border-sj-gray-200 bg-white hover:border-sj-gray-300"}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${deliveryOption === "split" ? "border-sj-blue" : "border-sj-gray-300"}`}>
-                            {deliveryOption === "split" && <div className="h-2 w-2 rounded-full bg-sj-blue" />}
+                  {/* ── Delivery option toggle: Split vs Full (só aparece quando há itens faltantes) ── */}
+                  {hasMissingItems && (
+                    <div className="bg-white rounded-lg border border-sj-gray-200 p-4 shadow-sm">
+                      <h4 className="text-xs font-bold text-sj-navy mb-3">Como deseja receber?</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={() => setDeliveryOption("split")}
+                          className={`rounded-lg border-2 px-4 py-3 text-left transition ${deliveryOption === "split" ? "border-sj-blue bg-sj-blue-50/30" : "border-sj-gray-200 bg-white hover:border-sj-gray-300"}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${deliveryOption === "split" ? "border-sj-blue" : "border-sj-gray-300"}`}>
+                              {deliveryOption === "split" && <div className="h-2 w-2 rounded-full bg-sj-blue" />}
+                            </div>
+                            <span className="text-sm font-bold text-sj-navy">Receber por pacotes</span>
                           </div>
-                          <span className="text-sm font-bold text-sj-navy">Receber por pacotes</span>
-                        </div>
-                        <p className="text-[11px] text-sj-gray-500 ml-6">Receba parte hoje e o restante depois</p>
-                      </button>
-                      <button onClick={() => setDeliveryOption("full")}
-                        className={`rounded-lg border-2 px-4 py-3 text-left transition ${deliveryOption === "full" ? "border-sj-blue bg-sj-blue-50/30" : "border-sj-gray-200 bg-white hover:border-sj-gray-300"}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${deliveryOption === "full" ? "border-sj-blue" : "border-sj-gray-300"}`}>
-                            {deliveryOption === "full" && <div className="h-2 w-2 rounded-full bg-sj-blue" />}
+                          <p className="text-[11px] text-sj-gray-500 ml-6">Receba parte hoje e o restante depois</p>
+                        </button>
+                        <button onClick={() => setDeliveryOption("full")}
+                          className={`rounded-lg border-2 px-4 py-3 text-left transition ${deliveryOption === "full" ? "border-sj-blue bg-sj-blue-50/30" : "border-sj-gray-200 bg-white hover:border-sj-gray-300"}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${deliveryOption === "full" ? "border-sj-blue" : "border-sj-gray-300"}`}>
+                              {deliveryOption === "full" && <div className="h-2 w-2 rounded-full bg-sj-blue" />}
+                            </div>
+                            <span className="text-sm font-bold text-sj-navy">Pedido completo</span>
                           </div>
-                          <span className="text-sm font-bold text-sj-navy">Pedido completo</span>
-                        </div>
-                        <p className="text-[11px] text-sj-gray-500 ml-6">Todos os itens em até 3 dias</p>
-                      </button>
+                          <p className="text-[11px] text-sj-gray-500 ml-6">Todos os itens em até 3 dias</p>
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {deliveryOption === "split" ? (
+                  {(!hasMissingItems || deliveryOption === "split") ? (
                     <>
                       {/* Pacote 1 — Filial mais próxima */}
                       {plan.storePackage && (
